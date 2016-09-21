@@ -1,0 +1,11 @@
+from django.db import models
+
+class Cabs(models.Model):
+  """ Stores the information about cab ie: location, cab type etc.
+  """
+  cab_number = models.CharField(max_length = 15, help_text = "Cab number ie: rj146c2916", primary_key=True)
+  car_name = models.CharField(max_length = 50, help_text = "Car name ie: Swift dezire")
+  car_pink = models.BooleanField()
+  car_booked = models.BooleanField()
+  latitude = models.FloatField()
+  longitude = models.FloatField()

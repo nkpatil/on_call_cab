@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+{% load static %}
+<html>
+  <head>
+    <title>Cab Service</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        height: 60%;
+      }
+      /* ----- Popup window script ----- */
+        .black_overlay{
+	        display: none;
+	        position: fixed;
+	        top: 0%;
+	        left: 0%;
+	        width: 100%;
+	        height: 100%;
+	        background-color: gray;
+	        z-index:1001;
+	        -moz-opacity: 0.5;
+	        opacity:.3;
+	        filter: alpha(opacity=50);
+        }
+        .white_content {
+	        display: none;
+	        position: fixed;
+	        top: 45%;
+	        left: 42%;
+	        background-color: transparent;
+	        z-index:1002;
+	        overflow: auto;
+        }
+        /* End popup style */
+    </style>
+  </head>
+  
+  <body>
+    <div id="map"></div>
+    
+    <table width="100%">
+        <tr>
+          <td> <img src="{% static 'images/cab.png' %}" /> | Normal Cab </td>
+          <td> <img src="{% static 'images/cab_pink.png' %}" /> | Pink Cab </td>
+          <td> <img src="{% static 'images/cab_booked.png' %}" /> | Booked Cab </td>
+        </tr>
+    </table>
+    
+    <table width="100%">
+      <tr>
+        <td style="width:50%;">
+          <table>
+            <tr> <td colspan="2" align="center"> <h4>Find a cab</h4> </td> </tr>
+            <tr>
+              <td>User Location</td>
+              <td> <input id="loc_input" class="controls" type="text" placeholder="Enter a location"> </td>
+            </tr>
+            <tr>
+              <td>Kilometer Range</td>
+              <td> <input id="km_range" class="controls" style="width:50px;" type="number" min="1" value="1"> </td>
+            </tr>
+              
+            <tr>
+              <td>Cab Choice</td>
+              <td>
+                <select id="car_choice" style="width:100px;">
+                  <option value="any">Any</option>
+                  <option value="pink">Pink</option>
+                </select> 
+              </td>
+            </tr>
+            
+            <tr>
+              <td colspan="2" align="center">
+                <button onclick="getCars();"> Get cars availability </button> 
+              </td>
+            </tr>
+          </table>
+          
+        </td>
+        
+        <td align="center" style="border-left: 1px solid black;">
+          <div id="div_output">
+            {% if car_number %}
+                <table>
+                  <tr> <td colspan="2" align="center"> <h4 style="color:green;">Cab booked</h4> </td> </tr>
+                  <tr>
+                    <td>Car Number : </td>
+                    <td> {{ car_number }} </td>
+                  </tr>
+                  <tr>
+                    <td>Car Name : </td>
+                    <td> {{ car_name }} </td>
+                  </tr>
+                </table>
+            {% endif %}
+          </div>
+          <form id="form_booking" method="post" action="" style="display:none;">
+            {% csrf_token %}
+            <input type="hidden" id="hidden_lat" name="lat">
+            <input type="hidden" id="hidden_lng" name="lng">
+            <input type="hidden" id="hidden_car_number" name="car_number">
+            <input type="submit" value="Book Now">
+          </form>
+        </td>
+        
+      </tr>
+    </table>
+    
+    <div id="loading" style="display:none" class="white_content"><img src="{% static 'images/loading_new.gif' %}" alt="Loading..." /></div>
+    <div id="fade" class="black_overlay"></div>
+  
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script>
+    
+      function getCars() {
+        var lat = document.getElementById('hidden_lat').value;
+        var lng = document.getElementById('hidden_lng').value;
+        var kmRange = document.getElementById('km_range').value;
+        var e = document.getElementById("car_choice");
+        var carChoice = e.options[e.selectedIndex].value;
+        var data = {"lat":lat, "lng":lng, "km_range":kmRange, "car_choice":carChoice};
+        $.ajax({
+		    url: 'get_cars',
+		    type: 'get',
+		    data: data,
+            beforeSend: function() {
+		        //$('#loading').show();
+		        document.getElementById('loading').style.display='block';
+		        document.getElementById('fade').style.display='block';
+		    },
+            complete: function(){
+                //$('#loading').hide();
+                document.getElementById('loading').style.display='none';
+                document.getElementById('fade').style.display='none';
+            },
+            success: function(data) {
+                document.getElementById('form_booking').style.display = "none";
+                document.getElementById('loc_input').value = "";
+                document.getElementById('div_output').innerHTML = data['cars_available'] + " cars available with in the given range";
+                document.getElementById('hidden_car_number').value = data['nearest_car']['cab_number'];
+                document.getElementById('hidden_lat').value = data['nearest_car']['latitude'];
+                document.getElementById('hidden_lng').value = data['nearest_car']['longitude'];
+                if(parseInt(data['cars_available']) > 0) {
+                    document.getElementById('form_booking').style.display = "block";
+                }
+            },
+            failure: function() {
+                alert('Got an error!');
+            }
+        });
+      }
+    
+      function initMap() {
+        var map = new google.maps.Map(document.getElementById('map'), {
+          center: { lat: 26.5, lng: 77.5},
+          zoom: 7,
+        });
+        var bounds = new google.maps.LatLngBounds();
+        {% for cab in cabs %}
+            cabLatLng = {lat: {{ cab.latitude }}, lng: {{ cab.longitude }} };
+            cab_icon = "{% static 'images/cab.png' %}"
+            if( "{{ cab.car_pink }}" == "True" ) {
+                cab_icon = "{% static 'images/cab_pink.png' %}"
+            }
+            if ( "{{ cab.car_booked }}" == "1" ) {
+                cab_icon = "{% static 'images/cab_booked.png' %}"
+            }
+            marker = new google.maps.Marker({
+              position: cabLatLng,
+              map: map,
+              icon: cab_icon,
+              title: "{{ cab.car_name }} : {{ cab.cab_number }}"
+            });
+            bounds.extend(marker.position);
+        {% endfor %}
+        //map.fitBounds(bounds);
+        
+        var input = document.getElementById('loc_input');
+
+        var autocomplete = new google.maps.places.Autocomplete(input);
+        autocomplete.bindTo('bounds', map);
+
+        var infowindow = new google.maps.InfoWindow();
+        var marker = new google.maps.Marker({
+          map: map,
+          anchorPoint: new google.maps.Point(0, -29)
+        });
+
+        autocomplete.addListener('place_changed', function() {
+          infowindow.close();
+          marker.setVisible(false);
+          var place = autocomplete.getPlace();
+          if (!place.geometry) {
+            window.alert("Autocomplete's returned place contains no geometry");
+            return;
+          }
+
+          // If the place has a geometry, then present it on a map.
+          if (place.geometry.viewport) {
+            map.fitBounds(place.geometry.viewport);
+          } else {
+            map.setCenter(place.geometry.location);
+            map.setZoom(14);  // Why 17? Because it looks good.
+          }
+          marker.setPosition(place.geometry.location);
+          marker.setVisible(true);
+          myLat = marker.getPosition().lat();
+          myLng = marker.getPosition().lng();
+          document.getElementById('hidden_lat').value = myLat;
+          document.getElementById('hidden_lng').value = myLng;
+          
+        });
+
+      }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCPki33DM7XYXNbkJIble32gHYaXWkkw6Y&libraries=places&callback=initMap"
+    async defer></script>
+  
+  </body>
+</html><!DOCTYPE html>
+{% load static %}
+<html>
+  <head>
+    <title>Cab Service</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        height: 60%;
+      }
+      /* ----- Popup window script ----- */
+        .black_overlay{
+	        display: none;
+	        position: fixed;
+	        top: 0%;
+	        left: 0%;
+	        width: 100%;
+	        height: 100%;
+	        background-color: gray;
+	        z-index:1001;
+	        -moz-opacity: 0.5;
+	        opacity:.3;
+	        filter: alpha(opacity=50);
+        }
+        .white_content {
+	        display: none;
+	        position: fixed;
+	        top: 45%;
+	        left: 42%;
+	        background-color: transparent;
+	        z-index:1002;
+	        overflow: auto;
+        }
+        /* End popup style */
+    </style>
+  </head>
+  
+  <body>
+    <div id="map"></div>
+    
+    <table width="100%">
+        <tr>
+          <td> <img src="{% static 'images/cab.png' %}" /> | Normal Cab </td>
+          <td> <img src="{% static 'images/cab_pink.png' %}" /> | Pink Cab </td>
+          <td> <img src="{% static 'images/cab_booked.png' %}" /> | Booked Cab </td>
+        </tr>
+    </table>
+    
+    <table width="100%">
+      <tr>
+        <td style="width:50%;">
+          <table>
+            <tr> <td colspan="2" align="center"> <h4>Find a cab</h4> </td> </tr>
+            <tr>
+              <td>User Location</td>
+              <td> <input id="loc_input" class="controls" type="text" placeholder="Enter a location"> </td>
+            </tr>
+            <tr>
+              <td>Kilometer Range</td>
+              <td> <input id="km_range" class="controls" style="width:50px;" type="number" min="1" value="1"> </td>
+            </tr>
+              
+            <tr>
+              <td>Cab Choice</td>
+              <td>
+                <select id="car_choice" style="width:100px;">
+                  <option value="any">Any</option>
+                  <option value="pink">Pink</option>
+                </select> 
+              </td>
+            </tr>
+            
+            <tr>
+              <td colspan="2" align="center">
+                <button onclick="getCars();"> Get cars availability </button> 
+              </td>
+            </tr>
+          </table>
+          
+        </td>
+        
+        <td align="center" style="border-left: 1px solid black;">
+          <div id="div_output">
+            {% if car_number %}
+                <table>
+                  <tr> <td colspan="2" align="center"> <h4 style="color:green;">Cab booked</h4> </td> </tr>
+                  <tr>
+                    <td>Car Number : </td>
+                    <td> {{ car_number }} </td>
+                  </tr>
+                  <tr>
+                    <td>Car Name : </td>
+                    <td> {{ car_name }} </td>
+                  </tr>
+                </table>
+            {% endif %}
+          </div>
+          <form id="form_booking" method="post" action="" style="display:none;">
+            {% csrf_token %}
+            <input type="hidden" id="hidden_lat" name="lat">
+            <input type="hidden" id="hidden_lng" name="lng">
+            <input type="hidden" id="hidden_car_number" name="car_number">
+            <input type="submit" value="Book Now">
+          </form>
+        </td>
+        
+      </tr>
+    </table>
+    
+    <div id="loading" style="display:none" class="white_content"><img src="{% static 'images/loading_new.gif' %}" alt="Loading..." /></div>
+    <div id="fade" class="black_overlay"></div>
+  
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script>
+    
+      function getCars() {
+        var lat = document.getElementById('hidden_lat').value;
+        var lng = document.getElementById('hidden_lng').value;
+        var kmRange = document.getElementById('km_range').value;
+        var e = document.getElementById("car_choice");
+        var carChoice = e.options[e.selectedIndex].value;
+        var data = {"lat":lat, "lng":lng, "km_range":kmRange, "car_choice":carChoice};
+        $.ajax({
+		    url: 'get_cars',
+		    type: 'get',
+		    data: data,
+            beforeSend: function() {
+		        //$('#loading').show();
+		        document.getElementById('loading').style.display='block';
+		        document.getElementById('fade').style.display='block';
+		    },
+            complete: function(){
+                //$('#loading').hide();
+                document.getElementById('loading').style.display='none';
+                document.getElementById('fade').style.display='none';
+            },
+            success: function(data) {
+                document.getElementById('form_booking').style.display = "none";
+                document.getElementById('loc_input').value = "";
+                document.getElementById('div_output').innerHTML = data['cars_available'] + " cars available with in the given range";
+                document.getElementById('hidden_car_number').value = data['nearest_car']['cab_number'];
+                document.getElementById('hidden_lat').value = data['nearest_car']['latitude'];
+                document.getElementById('hidden_lng').value = data['nearest_car']['longitude'];
+                if(parseInt(data['cars_available']) > 0) {
+                    document.getElementById('form_booking').style.display = "block";
+                }
+            },
+            failure: function() {
+                alert('Got an error!');
+            }
+        });
+      }
+    
+      function initMap() {
+        var map = new google.maps.Map(document.getElementById('map'), {
+          center: {lat: 26.914630, lng: 75.725907},
+          zoom: 14
+        });
+        
+        {% for cab in cabs %}
+            cabLatLng = {lat: {{ cab.latitude }}, lng: {{ cab.longitude }} };
+            cab_icon = "{% static 'images/cab.png' %}"
+            if( "{{ cab.car_pink }}" == "True" ) {
+                cab_icon = "{% static 'images/cab_pink.png' %}"
+            }
+            if ( "{{ cab.car_booked }}" == "1" ) {
+                cab_icon = "{% static 'images/cab_booked.png' %}"
+            }
+            marker = new google.maps.Marker({
+              position: cabLatLng,
+              map: map,
+              icon: cab_icon,
+              title: "{{ cab.car_name }} : {{ cab.cab_number }}"
+            });
+        {% endfor %}
+        
+        var input = document.getElementById('loc_input');
+
+        var autocomplete = new google.maps.places.Autocomplete(input);
+        autocomplete.bindTo('bounds', map);
+
+        var infowindow = new google.maps.InfoWindow();
+        var marker = new google.maps.Marker({
+          map: map,
+          anchorPoint: new google.maps.Point(0, -29)
+        });
+
+        autocomplete.addListener('place_changed', function() {
+          infowindow.close();
+          marker.setVisible(false);
+          var place = autocomplete.getPlace();
+          if (!place.geometry) {
+            window.alert("Autocomplete's returned place contains no geometry");
+            return;
+          }
+
+          // If the place has a geometry, then present it on a map.
+          if (place.geometry.viewport) {
+            map.fitBounds(place.geometry.viewport);
+          } else {
+            map.setCenter(place.geometry.location);
+            map.setZoom(14);  // Why 17? Because it looks good.
+          }
+          marker.setPosition(place.geometry.location);
+          marker.setVisible(true);
+          myLat = marker.getPosition().lat();
+          myLng = marker.getPosition().lng();
+          document.getElementById('hidden_lat').value = myLat;
+          document.getElementById('hidden_lng').value = myLng;
+          
+        });
+
+      }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCPki33DM7XYXNbkJIble32gHYaXWkkw6Y&libraries=places&callback=initMap"
+    async defer></script>
+  
+  </body>
+</html>

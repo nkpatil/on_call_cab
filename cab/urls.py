@@ -1,0 +1,9 @@
+from django.conf.urls import patterns, url
+from cab import views
+
+urlpatterns=patterns('',
+	url(r'^$',views.index, name='index'),
+	url(r'get_cars',views.get_cars, name='get_cars'),
+	url(r'end_trip',views.end_trip, name='end_trip'),
+	url(r'manage_trip',views.manage_trip, name='manage_trip'),
+)

@@ -1,0 +1,9 @@
+from django.contrib import admin
+from cab.models import Cabs
+
+class CabsAdmin(admin.ModelAdmin):
+  list_display = ('cab_number', 'car_name', 'car_type')
+  list_filter = ['cab_number', 'car_type']
+  search_fields = ['cab_number', 'car_type']
+  
+admin.site.register(Cabs, CabsAdmin)

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+{% load static %}
+<html>
+  <head>
+    <title>Cab Service</title>
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #map {
+        height: 60%;
+      }
+      /* ----- Popup window script ----- */
+        .black_overlay{
+	        display: none;
+	        position: fixed;
+	        top: 0%;
+	        left: 0%;
+	        width: 100%;
+	        height: 100%;
+	        background-color: gray;
+	        z-index:1001;
+	        -moz-opacity: 0.5;
+	        opacity:.3;
+	        filter: alpha(opacity=50);
+        }
+        .white_content {
+	        display: none;
+	        position: fixed;
+	        top: 45%;
+	        left: 42%;
+	        background-color: transparent;
+	        z-index:1002;
+	        overflow: auto;
+        }
+        /* End popup style */
+    </style>
+  </head>
+  
+  <body>
+    <div id="map"></div>    
+    <table width="100%">
+      <tr>
+        <td style="width:50%;">
+            <table>
+                <tr> <td colspan="2" align="center"> <h4>End trip</h4> </td> </tr>
+                <tr>
+                  <td>End Location</td>
+                  <td> <input id="loc_input" class="controls" type="text" placeholder="Enter a location"> </td>
+                </tr>
+                <tr>
+                  <td>Car Number</td>
+                  <td> <input id="car_number" type="text" placeholder="Enter car number"> </td>
+                </tr>
+                <tr>
+                  <td>Minutes taken</td>
+                  <td> <input id="minutes" type="number" placeholder="Enter minutes taken" min="1"> </td>
+                </tr>
+                <tr>
+                  <td colspan="2" align="center">
+                    <button onclick="endTrip();"> End Trip </button> 
+                  </td>
+                </tr>
+                <tr>
+                    <td> <input type="hidden" id="lat"> </td>
+                    <td> <input type="hidden" id="lng"> </td>
+                </tr>
+            </table>
+        </td>
+        
+        <td style="width:50%;">
+            <table style="display:none;" id="output">
+                <tr> <td colspan="2" align="center"> <h4>Trip Ended</h4> (This car is free now for new bookings) </td> </tr>
+                <tr> <td>Car number : </td> <td id="car"> </td> </tr>
+                <tr> <td>Distance covered : </td> <td id="dist"></td> </tr>
+                <tr> <td>Kilometer charges : </td> <td id="km_charge"></td> </tr>
+                <tr> <td>Minutes charges : </td> <td id="minutes_charge"></td> </tr>
+                <tr> <td>Extra charge : </td> <td id="extra_charge"></td> </tr>
+                <tr> <td>GST : </td> <td id="gst"></td> </tr>
+                <tr> <td>Final amount : </td> <td id="final_amt"></td> </tr>
+            </table>
+        </td>
+        
+      </tr>
+    </table>
+    <div id="loading" style="display:none" class="white_content"><img src="{% static 'images/loading_new.gif' %}" alt="Loading..." /></div>
+    <div id="fade" class="black_overlay"></div>
+  
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script>
+    
+      function endTrip() {
+        var lat = document.getElementById('lat').value;
+        var lng = document.getElementById('lng').value;
+        var minutes = document.getElementById('minutes').value;
+        var car_number = document.getElementById('car_number').value;
+        var data = {"lat":lat, "lng":lng, 'minutes':minutes, 'car_number':car_number};
+        $.ajax({
+		    url: 'end_trip',
+		    type: 'get',
+		    data: data,
+            beforeSend: function() {
+		        //$('#loading').show();
+		        document.getElementById('loading').style.display='block';
+		        document.getElementById('fade').style.display='block';
+		    },
+            complete: function(){
+                //$('#loading').hide();
+                document.getElementById('loading').style.display='none';
+                document.getElementById('fade').style.display='none';
+            },
+            success: function(data) {
+                document.getElementById('output').style.display = "block";
+                document.getElementById('car').innerHTML = car_number;
+                document.getElementById('dist').innerHTML = data['distance'];
+                document.getElementById('km_charge').innerHTML = data['km_charge'];
+                document.getElementById('minutes_charge').innerHTML = data['minutes_charge'];
+                document.getElementById('extra_charge').innerHTML = data['extra_charge'];
+                document.getElementById('gst').innerHTML = data['gst'];
+                document.getElementById('final_amt').innerHTML = data['final_amount'];
+            },
+            failure: function() {
+                alert('Got an error!');
+            }
+        });
+      }
+    
+      function initMap() {
+        var map = new google.maps.Map(document.getElementById('map'), {
+          center: {lat: 26.914630, lng: 75.725907},
+          zoom: 14
+        });
+        
+        {% for cab in cabs %}
+            cabLatLng = {lat: {{ cab.latitude }}, lng: {{ cab.longitude }} };
+            cab_icon = "{% static 'images/cab.png' %}"
+            if( "{{ cab.car_pink }}" == "True" ) {
+                cab_icon = "{% static 'images/cab_pink.png' %}"
+            }
+            if ( "{{ cab.car_booked }}" == "1" ) {
+                cab_icon = "{% static 'images/cab_booked.png' %}"
+            }
+            marker = new google.maps.Marker({
+              position: cabLatLng,
+              map: map,
+              icon: cab_icon,
+              title: "{{ cab.car_name }} : {{ cab.cab_number }}"
+            });
+        {% endfor %}
+        
+        var input = document.getElementById('loc_input');
+
+        var autocomplete = new google.maps.places.Autocomplete(input);
+        autocomplete.bindTo('bounds', map);
+
+        var infowindow = new google.maps.InfoWindow();
+        var marker = new google.maps.Marker({
+          map: map,
+          anchorPoint: new google.maps.Point(0, -29)
+        });
+
+        autocomplete.addListener('place_changed', function() {
+          infowindow.close();
+          marker.setVisible(false);
+          var place = autocomplete.getPlace();
+          if (!place.geometry) {
+            window.alert("Autocomplete's returned place contains no geometry");
+            return;
+          }
+
+          // If the place has a geometry, then present it on a map.
+          if (place.geometry.viewport) {
+            map.fitBounds(place.geometry.viewport);
+          } else {
+            map.setCenter(place.geometry.location);
+            map.setZoom(14);  // Why 17? Because it looks good.
+          }
+          marker.setPosition(place.geometry.location);
+          marker.setVisible(true);
+          myLat = marker.getPosition().lat();
+          myLng = marker.getPosition().lng();
+          document.getElementById('hidden_lat').value = myLat;
+          document.getElementById('hidden_lng').value = myLng;
+          
+        });
+
+      }
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCPki33DM7XYXNbkJIble32gHYaXWkkw6Y&libraries=places&callback=initMap"
+    async defer></script>
+  
+  </body>
+</html>
